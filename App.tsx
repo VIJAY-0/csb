@@ -39,13 +39,13 @@ const App: React.FC = () => {
       await pubSubClient.connect();
       setIsBridgeConnected(true);
       
-      addLog("Subscribed to Redis Bridge...");
+      addLog("Connecting to Redis Pub/Sub bridge...");
       
       await pubSubClient.subscribeAndLaunch(
         repoUrl,
         (msg) => addLog(msg),
         (inst) => {
-          addLog("Environment Ready. Redirecting to VS Code...");
+          addLog("MicroVM Ready. Initializing Secure Stream...");
           setInstance(inst);
           setTimeout(() => setStatus(SessionStatus.READY), 1000);
         }
@@ -81,11 +81,11 @@ const App: React.FC = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
               </span>
-              Firecracker V3.0 + Redis Pub/Sub
+              Worker Engine: codesb-v1
             </div>
             
-            <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight leading-tight">
-              Instant Cloud <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">Workspaces.</span>
+            <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight leading-tight text-balance">
+              Automated MicroVM <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">Provisioning.</span>
             </h2>
             
             <form onSubmit={handleLaunch} className="relative max-w-2xl mx-auto group">
@@ -103,7 +103,7 @@ const App: React.FC = () => {
                   disabled={!repoUrl}
                   className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white px-8 py-4 rounded-lg font-bold transition-all shadow-lg active:scale-95"
                 >
-                  Deploy
+                  Spin Up
                 </button>
               </div>
             </form>
@@ -115,8 +115,8 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-6xl">
               <div className="lg:col-span-2">
                 <div className="mb-6">
-                  <h3 className="text-3xl font-bold text-white mb-2">Real-time Provisioning</h3>
-                  <p className="text-zinc-400">Waiting for events on <code className="text-indigo-400 px-1.5 py-0.5 bg-indigo-500/10 rounded">redis:pubsub</code></p>
+                  <h3 className="text-3xl font-bold text-white mb-2">Worker Orchestration</h3>
+                  <p className="text-zinc-400">Communicating via <code className="text-indigo-400 px-1.5 py-0.5 bg-indigo-500/10 rounded">worker:codesb:start</code></p>
                 </div>
                 <Terminal logs={logs} isConnected={isBridgeConnected} />
               </div>
@@ -125,7 +125,7 @@ const App: React.FC = () => {
                 <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 h-fit">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-md bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs">AI</div>
-                    <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Stack Insights</h4>
+                    <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Analysis</h4>
                   </div>
                   
                   {!aiAnalysis ? (
@@ -136,10 +136,10 @@ const App: React.FC = () => {
                   ) : (
                     <div className="animate-in fade-in slide-in-from-right-4">
                       <div className="mb-4">
-                        <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Detected</div>
+                        <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Stack</div>
                         <div className="text-lg font-semibold text-zinc-100">{aiAnalysis.projectType}</div>
                       </div>
-                      <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Auto-Applied Profiles</div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Environment Profiles</div>
                       <ul className="space-y-2">
                         {aiAnalysis.suggestedOptimizations.map((opt, i) => (
                           <li key={i} className="text-xs text-zinc-400 flex items-center gap-2">
@@ -167,13 +167,13 @@ const App: React.FC = () => {
             <div className="w-20 h-20 bg-red-950/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-8 border border-red-500/20">
               ✖
             </div>
-            <h3 className="text-3xl font-bold text-white mb-3">Bridge Error</h3>
+            <h3 className="text-3xl font-bold text-white mb-3">Bridge Link Failed</h3>
             <p className="text-zinc-400 mb-10 leading-relaxed">{error}</p>
             <button
               onClick={() => setStatus(SessionStatus.IDLE)}
               className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl font-bold transition-all"
             >
-              Retry Connection
+              Reconnect Bridge
             </button>
           </div>
         )}
@@ -181,16 +181,16 @@ const App: React.FC = () => {
 
       <footer className="h-10 px-6 border-t border-zinc-900 bg-black flex items-center justify-between text-[10px] text-zinc-600 font-medium shrink-0">
         <div className="flex items-center gap-4">
-          <span>&copy; 2024 ORCHESTRATOR.IO</span>
+          <span>&copy; 2024 CODESB INFRA</span>
           <span className="text-zinc-800">|</span>
           <span className={`flex items-center gap-1.5 font-bold ${isBridgeConnected ? 'text-emerald-600' : 'text-amber-600'}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${isBridgeConnected ? 'bg-emerald-600' : 'bg-amber-600 animate-pulse'}`}></span>
-            {isBridgeConnected ? 'REDIS BRIDGE ACTIVE' : 'BRIDGE STANDBY'}
+            {isBridgeConnected ? 'PUB/SUB ACTIVE' : 'BRIDGE STANDBY'}
           </span>
         </div>
         <div className="flex gap-6">
-          <span>PUB: orchestrator:provision:request</span>
-          <span>SUB: orchestrator:provision:logs:*</span>
+          <span>PUB: worker:codesb:start</span>
+          <span>SUB: worker:codesb:response:*</span>
         </div>
       </footer>
     </div>

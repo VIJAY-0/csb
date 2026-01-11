@@ -7,9 +7,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 // Hardcoded Redis-Bridge Configuration
 const WS_URL = "ws://localhost:8081/ws"; 
 const CHANNELS = {
-  REQUEST: "orchestrator:provision:request",
-  TERMINATE: "orchestrator:provision:terminate",
-  LOG_PREFIX: "orchestrator:provision:logs:"
+  REQUEST: "worker:codesb:start",
+  TERMINATE: "worker:codesb:stop",
+  RESPONSE_PREFIX: "worker:codesb:response:"
 };
 
 export interface RepoAnalysis {
@@ -23,7 +23,7 @@ export type ReadyCallback = (instance: InstanceData) => void;
 
 class RedisPubSubClient {
   private socket: WebSocket | null = null;
-  private correlationId: string | null = null;
+  private taskId: string | null = null;
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -42,29 +42,37 @@ class RedisPubSubClient {
       await this.connect();
     }
 
-    this.correlationId = `req_${Math.random().toString(36).substr(2, 9)}`;
+    this.taskId = `${Math.random().toString(36).substr(2, 9)}${Date.now().toString(36)}`;
     
-    // Listen for responses on our specific correlation channel
+    // Listen for responses on our specific task response channel
     this.socket!.onmessage = (event) => {
       const payload = JSON.parse(event.data);
       
-      // Filter by channel/correlation
-      if (payload.channel === `${CHANNELS.LOG_PREFIX}${this.correlationId}`) {
+      // The bridge should deliver messages from the response channel
+      if (payload.channel === `${CHANNELS.RESPONSE_PREFIX}${this.taskId}`) {
         if (payload.type === 'LOG') {
           onLog(payload.message);
         } else if (payload.type === 'READY') {
           onReady(payload.data as InstanceData);
+        } else if (payload.type === 'ERROR') {
+          onLog(`Error: ${payload.message}`);
         }
       }
     };
 
-    // Publish launch request
+    // Publish launch request as defined in the worker spec
+    const taskPayload = {
+      task_id: this.taskId,
+      cpu: 1,
+      memory: 1024,
+      network_group: "",
+      isolated: true,
+      github_url: repoUrl
+    };
+
     this.socket!.send(JSON.stringify({
       channel: CHANNELS.REQUEST,
-      payload: {
-        correlationId: this.correlationId,
-        repoUrl: repoUrl
-      }
+      payload: taskPayload
     }));
   }
 
@@ -72,7 +80,7 @@ class RedisPubSubClient {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({
         channel: CHANNELS.TERMINATE,
-        payload: { sessionId }
+        payload: { task_id: this.taskId || sessionId }
       }));
     }
   }
