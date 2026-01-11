@@ -1,27 +1,16 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import Header from './components/Header';
 import Terminal from './components/Terminal';
 import IDEView from './components/IDEView';
-import { SessionStatus, InstanceData, ProvisioningLog } from './types';
-import { pubSubClient, analyzeRepository, RepoAnalysis } from './services/orchestratorService';
+import { SessionStatus, InstanceData } from './types';
+import { launchInstance, terminateSession } from './services/orchestratorService';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<SessionStatus>(SessionStatus.IDLE);
   const [repoUrl, setRepoUrl] = useState('');
   const [instance, setInstance] = useState<InstanceData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<RepoAnalysis | null>(null);
-  const [logs, setLogs] = useState<ProvisioningLog[]>([]);
-  const [isBridgeConnected, setIsBridgeConnected] = useState(false);
-
-  const addLog = useCallback((message: string) => {
-    setLogs(prev => [...prev, {
-      timestamp: new Date().toLocaleTimeString(),
-      message,
-      type: 'info'
-    }]);
-  }, []);
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,129 +19,78 @@ const App: React.FC = () => {
     try {
       setStatus(SessionStatus.PROVISIONING);
       setError(null);
-      setLogs([]);
       
-      // 1. Analyze with Gemini in parallel
-      analyzeRepository(repoUrl).then(setAiAnalysis);
-
-      // 2. Start Redis Pub/Sub Session
-      await pubSubClient.connect();
-      setIsBridgeConnected(true);
-      
-      addLog("Connecting to Redis Pub/Sub bridge...");
-      
-      await pubSubClient.subscribeAndLaunch(
-        repoUrl,
-        (msg) => addLog(msg),
-        (inst) => {
-          addLog("MicroVM Ready. Initializing Secure Stream...");
-          setInstance(inst);
-          setTimeout(() => setStatus(SessionStatus.READY), 1000);
-        }
-      );
-
+      const data = await launchInstance(repoUrl);
+      setInstance(data);
+      setStatus(SessionStatus.READY);
     } catch (err: any) {
-      setError(err.message || 'Failed to establish Redis bridge connection');
+      setError(err.message || 'Failed to provision instance');
       setStatus(SessionStatus.ERROR);
-      setIsBridgeConnected(false);
     }
   };
 
   const handleDestroy = async () => {
     if (instance) {
-      pubSubClient.terminate(instance.id);
+      try {
+        await terminateSession(instance.id);
+      } catch (err) {
+        console.error("Cleanup error:", err);
+      }
     }
     setInstance(null);
     setStatus(SessionStatus.IDLE);
     setRepoUrl('');
-    setAiAnalysis(null);
-    setLogs([]);
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#09090b]">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950">
       <Header status={status} onDestroy={handleDestroy} />
 
       <main className="flex-1 flex flex-col items-center justify-center relative">
         {status === SessionStatus.IDLE && (
-          <div className="max-w-3xl w-full px-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest mb-6 mx-auto">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-              </span>
-              Worker Engine: codesb-v1
-            </div>
-            
-            <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight leading-tight text-balance">
-              Automated MicroVM <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">Provisioning.</span>
+          <div className="max-w-2xl w-full px-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+              Ephemeral <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Dev Environments</span>
             </h2>
+            <p className="text-zinc-400 text-lg mb-10 max-w-lg mx-auto leading-relaxed">
+              Launch a pre-configured VS Code server for any GitHub repository in seconds. Powered by Firecracker.
+            </p>
             
-            <form onSubmit={handleLaunch} className="relative max-w-2xl mx-auto group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
-              <div className="relative flex items-center bg-zinc-900 rounded-xl p-2 border border-zinc-800">
-                <input
-                  type="text"
-                  placeholder="GitHub Repository URL"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="flex-1 bg-transparent text-zinc-200 px-6 py-4 focus:outline-none placeholder:text-zinc-600 text-lg"
-                />
-                <button
-                  type="submit"
-                  disabled={!repoUrl}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white px-8 py-4 rounded-lg font-bold transition-all shadow-lg active:scale-95"
-                >
-                  Spin Up
-                </button>
-              </div>
+            <form onSubmit={handleLaunch} className="relative max-w-xl mx-auto group">
+              <input
+                type="text"
+                placeholder="https://github.com/username/repo"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                className="w-full bg-zinc-900/50 border border-zinc-800 text-zinc-200 px-6 py-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-zinc-600 text-lg"
+              />
+              <button
+                type="submit"
+                disabled={!repoUrl}
+                className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 rounded-lg font-semibold transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+              >
+                Launch Instance
+              </button>
             </form>
+
+            <div className="mt-12 flex items-center justify-center gap-8 grayscale opacity-40 hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+               <img src="https://picsum.photos/id/1/60/24" alt="Docker" className="h-6" />
+               <img src="https://picsum.photos/id/2/80/24" alt="K8s" className="h-6" />
+               <img src="https://picsum.photos/id/3/100/24" alt="AWS" className="h-6" />
+            </div>
           </div>
         )}
 
         {status === SessionStatus.PROVISIONING && (
-          <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-zinc-950/40 backdrop-blur-xl animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-6xl">
-              <div className="lg:col-span-2">
-                <div className="mb-6">
-                  <h3 className="text-3xl font-bold text-white mb-2">Worker Orchestration</h3>
-                  <p className="text-zinc-400">Communicating via <code className="text-indigo-400 px-1.5 py-0.5 bg-indigo-500/10 rounded">worker:codesb:start</code></p>
-                </div>
-                <Terminal logs={logs} isConnected={isBridgeConnected} />
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-500">
+            <div className="mb-8 text-center">
+              <div className="inline-block px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-widest mb-4">
+                Provisioning in Progress
               </div>
-              
-              <div className="flex flex-col gap-4">
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 h-fit">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-6 h-6 rounded-md bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs">AI</div>
-                    <h4 className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Analysis</h4>
-                  </div>
-                  
-                  {!aiAnalysis ? (
-                    <div className="space-y-4">
-                      <div className="h-4 bg-zinc-800 rounded animate-pulse w-3/4"></div>
-                      <div className="h-4 bg-zinc-800 rounded animate-pulse w-1/2"></div>
-                    </div>
-                  ) : (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                      <div className="mb-4">
-                        <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Stack</div>
-                        <div className="text-lg font-semibold text-zinc-100">{aiAnalysis.projectType}</div>
-                      </div>
-                      <div className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Environment Profiles</div>
-                      <ul className="space-y-2">
-                        {aiAnalysis.suggestedOptimizations.map((opt, i) => (
-                          <li key={i} className="text-xs text-zinc-400 flex items-center gap-2">
-                            <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
-                            {opt}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <h3 className="text-2xl font-semibold text-zinc-100 mb-2">Setting up your environment</h3>
+              <p className="text-zinc-400">This usually takes about 30 seconds</p>
             </div>
+            <Terminal />
           </div>
         )}
 
@@ -164,33 +102,27 @@ const App: React.FC = () => {
 
         {status === SessionStatus.ERROR && (
           <div className="text-center p-8 max-w-md animate-in zoom-in duration-300">
-            <div className="w-20 h-20 bg-red-950/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-8 border border-red-500/20">
-              ✖
+            <div className="w-16 h-16 bg-red-950/30 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl">
+              ⚠️
             </div>
-            <h3 className="text-3xl font-bold text-white mb-3">Bridge Link Failed</h3>
-            <p className="text-zinc-400 mb-10 leading-relaxed">{error}</p>
+            <h3 className="text-2xl font-bold text-white mb-2">Provisioning Failed</h3>
+            <p className="text-zinc-400 mb-8">{error || 'An unexpected error occurred while launching your instance.'}</p>
             <button
               onClick={() => setStatus(SessionStatus.IDLE)}
-              className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl font-bold transition-all"
+              className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg transition-colors"
             >
-              Reconnect Bridge
+              Try Again
             </button>
           </div>
         )}
       </main>
 
-      <footer className="h-10 px-6 border-t border-zinc-900 bg-black flex items-center justify-between text-[10px] text-zinc-600 font-medium shrink-0">
-        <div className="flex items-center gap-4">
-          <span>&copy; 2024 CODESB INFRA</span>
-          <span className="text-zinc-800">|</span>
-          <span className={`flex items-center gap-1.5 font-bold ${isBridgeConnected ? 'text-emerald-600' : 'text-amber-600'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isBridgeConnected ? 'bg-emerald-600' : 'bg-amber-600 animate-pulse'}`}></span>
-            {isBridgeConnected ? 'PUB/SUB ACTIVE' : 'BRIDGE STANDBY'}
-          </span>
-        </div>
-        <div className="flex gap-6">
-          <span>PUB: worker:codesb:start</span>
-          <span>SUB: worker:codesb:response:*</span>
+      <footer className="h-10 px-6 border-t border-zinc-900 bg-zinc-950 flex items-center justify-between text-[10px] text-zinc-600 font-medium shrink-0">
+        <div>&copy; 2024 CLOUDIDE ORCHESTRATOR v0.1.0-alpha</div>
+        <div className="flex gap-4">
+          <span>LATENCY: 14ms</span>
+          <span>SYSTEM LOAD: 4.2%</span>
+          <span className="text-green-600">CLUSTER HEALTH: OPTIMAL</span>
         </div>
       </footer>
     </div>

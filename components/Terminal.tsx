@@ -1,14 +1,48 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ProvisioningLog } from '../types';
 
 interface TerminalProps {
-  logs: ProvisioningLog[];
-  isConnected: boolean;
+  onComplete?: () => void;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ logs, isConnected }) => {
+const LOG_MESSAGES = [
+  "Initializing worker request context...",
+  "Searching for available capacity in us-east-1...",
+  "Worker node found: worker-7742-alpha",
+  "Allocating Firecracker MicroVM resources...",
+  "Mounting rootfs (Ubuntu 22.04 LTS)...",
+  "Configuring Calico networking overlay...",
+  "Assigning internal IP: 10.244.15.22/32",
+  "Applying security group policies (port 8080 open)...",
+  "Cloning repository into /workspace...",
+  "Installing dependencies via bun/npm...",
+  "Starting code-server (VS Code binary)...",
+  "Waiting for health check on port 8080...",
+  "Health check passed! Proxying traffic...",
+];
+
+const Terminal: React.FC<TerminalProps> = () => {
+  const [logs, setLogs] = useState<ProvisioningLog[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let currentLine = 0;
+    const interval = setInterval(() => {
+      if (currentLine < LOG_MESSAGES.length) {
+        setLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString(),
+          message: LOG_MESSAGES[currentLine],
+          type: 'info'
+        }]);
+        currentLine++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 450);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -17,45 +51,28 @@ const Terminal: React.FC<TerminalProps> = ({ logs, isConnected }) => {
   }, [logs]);
 
   return (
-    <div className="w-full max-w-3xl mx-auto mt-8 bg-black border border-zinc-800 rounded-lg shadow-2xl overflow-hidden ring-1 ring-white/5">
-      <div className="bg-zinc-900/50 px-4 py-2.5 flex items-center justify-between border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/40"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500/40"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500/40"></div>
-          </div>
-          <span className="text-xs text-zinc-500 font-medium ml-2 terminal-font">redis-pubsub-stream</span>
+    <div className="w-full max-w-3xl mx-auto mt-8 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden">
+      <div className="bg-zinc-800 px-4 py-2 flex items-center gap-2 border-b border-zinc-700">
+        <div className="flex gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
+          <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+          <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`}></div>
-          <div className="text-[10px] text-zinc-500 terminal-font uppercase tracking-tighter">
-            {isConnected ? 'Subscribed' : 'Connecting Bridge...'}
-          </div>
-        </div>
+        <span className="text-xs text-zinc-400 font-medium ml-2 terminal-font">provisioning-logs</span>
       </div>
       <div 
         ref={scrollRef}
-        className="p-5 h-80 overflow-y-auto terminal-font text-sm leading-relaxed"
+        className="p-4 h-80 overflow-y-auto terminal-font text-sm leading-relaxed"
       >
-        {logs.length === 0 && (
-          <div className="text-zinc-700 animate-pulse">Waiting for Redis log events...</div>
-        )}
         {logs.map((log, idx) => (
-          <div key={idx} className="flex gap-4 mb-1.5 group animate-in fade-in slide-in-from-left-2 duration-300">
-            <span className="text-zinc-600 whitespace-nowrap opacity-50 select-none">[{log.timestamp}]</span>
-            <span className={log.message.includes('[AI]') ? 'text-indigo-400' : 'text-emerald-500'}>
-              {log.message.includes('[AI]') ? '✨' : '➜'}
-            </span>
-            <span className={`${
-              log.message.includes('[AI]') ? 'text-indigo-300 font-medium' : 'text-zinc-300'
-            }`}>
-              {log.message}
-            </span>
+          <div key={idx} className="flex gap-4 mb-1">
+            <span className="text-zinc-500 whitespace-nowrap">[{log.timestamp}]</span>
+            <span className="text-emerald-400">➜</span>
+            <span className="text-zinc-300">{log.message}</span>
           </div>
         ))}
-        <div className="flex items-center gap-2 text-zinc-300 mt-2">
-          <span className="w-2 h-4 bg-indigo-500/50 animate-pulse"></span>
+        <div className="flex items-center gap-2 text-zinc-300">
+          <span className="animate-pulse">_</span>
         </div>
       </div>
     </div>
