@@ -1,0 +1,5 @@
+{
+  "name": "Cloud IDE Orchestrator",
+  "description": "A modern dashboard for provisioning and managing on-demand VS Code cloud environments using Firecracker microVMs.",
+  "requestFramePermissions": []
+}
